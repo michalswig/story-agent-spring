@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <title>Story Agent</title>
+    <style>
+        body { font: 16px/1.4 system-ui, sans-serif; margin: 24px; max-width: 760px }
+        h1 { margin: 0 0 16px }
+        form { display: grid; gap: 12px; margin-bottom: 20px }
+        label { font-weight: 600 }
+        input, textarea, button { padding: 10px; border: 1px solid #ddd; border-radius: 8px }
+        textarea { min-height: 80px }
+        button { cursor: pointer }
+        .row { display: grid; grid-template-columns: 1fr 170px; gap: 12px }
+        .card { border: 1px solid #eee; border-radius: 12px; padding: 16px; box-shadow: 0 2px 6px rgba(0,0,0,.05) }
+        .title { font-weight: 700; margin-bottom: 8px }
+        .moral { margin-top: 12px; font-style: italic }
+        .error { color: #a00; }
+        .muted { color: #666; font-size: .9em }
+    </style>
+</head>
+<body>
+<h1>Story Agent</h1>
+
+<form id="storyForm" class="card">
+    <div>
+        <label for="words">Words (comma or newline separated)</label>
+        <textarea id="words" placeholder="fox, forest, lantern"></textarea>
+    </div>
+
+    <div class="row">
+        <div>
+            <label for="tone">Tone</label>
+            <input id="tone" placeholder="warm and playful" value="warm and playful"/>
+        </div>
+        <div>
+            <label for="maxWords">Max words</label>
+            <input id="maxWords" type="number" min="10" max="250" value="90"/>
+        </div>
+    </div>
+
+    <div class="row" style="grid-template-columns: 180px 1fr;">
+        <button id="submitBtn" type="submit">Tell a story</button>
+        <div id="status" class="muted"></div>
+    </div>
+
+    <div class="muted">Sends POST /api/story with JSON. Your Spring Boot app returns title, story, moral.</div>
+</form>
+
+<div id="result"></div>
+
+<script>
+    const form = document.getElementById('storyForm');
+    const statusEl = document.getElementById('status');
+    const btn = document.getElementById('submitBtn');
+    const result = document.getElementById('result');
+
+    function parseWords(raw) {
+        return raw.split(/[\n,]+/).map(w => w.trim()).filter(Boolean);
+    }
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        result.innerHTML = '';
+        statusEl.textContent = 'Sending...';
+        btn.disabled = true;
+
+        const words = parseWords(document.getElementById('words').value);
+        const tone = document.getElementById('tone').value || 'gentle and cheerful';
+        const maxWords = Math.max(10, Math.min(250, Number(document.getElementById('maxWords').value) || 120));
+
+        try {
+            const res = await fetch('/api/story', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ words, tone, maxWords })
+            });
+
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(`HTTP ${res.status} ${res.statusText}: ${text}`);
+            }
+
+            const data = await res.json();
+            statusEl.textContent = 'Done';
+            result.innerHTML = `
+          <div class="card">
+            <div class="title">${escapeHtml(data.title)}</div>
+            <div class="story">${escapeHtml(data.story).replace(/\n/g, '<br>')}</div>
+            <div class="moral">${escapeHtml(data.moral)}</div>
+          </div>
+        `;
+        } catch (err) {
+            statusEl.textContent = '';
+            result.innerHTML = `<div class="error">Error: ${escapeHtml(err.message)}</div>`;
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+</script>
+</body>
+</html>
